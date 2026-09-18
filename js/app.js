@@ -29,14 +29,37 @@ const monthLabel = (d) => d.toLocaleDateString('en-US', { month: 'long', year: '
 
 async function init() {
   await openDB();
+  bindEvents();
+  registerServiceWorker();
+  Sync.onStatusChange(updateSyncDot);
+
+  const guestMode = localStorage.getItem('guest_mode') === '1';
+
+  if (Auth.isSignedIn() || guestMode) {
+    await enterApp();
+  } else {
+    showAuthGate();
+  }
+}
+
+async function enterApp() {
+  document.getElementById('authGate').hidden = true;
+  document.getElementById('app').hidden = false;
+
   await seedCategoriesIfEmpty();
   await loadAll();
   render();
-  bindEvents();
-  registerServiceWorker();
+  renderAccountSection();
 
-  Sync.onStatusChange(updateSyncDot);
   if (navigator.onLine && Auth.isSignedIn()) Sync.run();
+}
+
+function showAuthGate() {
+  document.getElementById('app').hidden = true;
+  document.getElementById('authGate').hidden = false;
+  document.getElementById('authName').value = '';
+  document.getElementById('authPin').value = '';
+  document.getElementById('authStatus').textContent = '';
 }
 
 async function seedCategoriesIfEmpty() {
@@ -229,7 +252,6 @@ async function handleDeleteEntry() {
 
 // ===== Settings sheet =====
 function openSettingsSheet() {
-  document.getElementById('authStatus').textContent = '';
   renderAccountSection();
   document.getElementById('settingsBackdrop').hidden = false;
 }
@@ -250,48 +272,78 @@ function renderAccountSection() {
   }
 }
 
-async function handleAuthSubmit(action) {
+// ===== Auth gate (login / create account) =====
+let authMode = 'login';
+
+function setAuthMode(mode) {
+  authMode = mode;
+  document.querySelectorAll('.auth-tab').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+  document.getElementById('authSubmitBtn').textContent = mode === 'register' ? 'Create account' : 'Log in';
+  document.getElementById('authModeHint').textContent =
+    mode === 'register'
+      ? 'Pick any name and a PIN (4+ digits) — this is what you\'ll use to log in on other devices.'
+      : 'Log in with the name and PIN you used before.';
+  document.getElementById('authStatus').textContent = '';
+}
+
+async function handleAuthSubmit(e) {
+  e.preventDefault();
   const name = document.getElementById('authName').value.trim();
   const pin = document.getElementById('authPin').value.trim();
   const status = document.getElementById('authStatus');
+  const submitBtn = document.getElementById('authSubmitBtn');
 
   if (!name || !pin) {
     status.textContent = 'Enter a name and PIN.';
     return;
   }
 
-  status.textContent = action === 'register' ? 'Creating account…' : 'Signing in…';
+  submitBtn.disabled = true;
+  status.textContent = authMode === 'register' ? 'Creating account…' : 'Signing in…';
   try {
-    if (action === 'register') {
+    if (authMode === 'register') {
       await Auth.register(name, pin);
+      // Brand new account — start it off with the default category set.
+      await clearLocalData();
+      await seedCategoriesIfEmpty();
     } else {
       await Auth.login(name, pin);
+      // Existing account — wipe any local/guest data on this device so
+      // nothing gets mixed in with what's about to be pulled from the
+      // server; don't reseed defaults, the account already has its own.
+      await clearLocalData();
     }
-    // Fresh start locally so we never mix this account's data with
-    // whatever was cached from a previous account on this device.
-    await clearLocalData();
-    await seedCategoriesIfEmpty();
-    status.textContent = 'Signed in. Syncing…';
+    localStorage.removeItem('guest_mode');
     await Sync.run();
-    await loadAll();
-    render();
-    renderAccountSection();
-    status.textContent = '';
-    document.getElementById('authName').value = '';
-    document.getElementById('authPin').value = '';
+    await enterApp();
   } catch (err) {
     status.textContent = err.message || 'Something went wrong.';
+  } finally {
+    submitBtn.disabled = false;
   }
+}
+
+function handleContinueOffline() {
+  localStorage.setItem('guest_mode', '1');
+  enterApp();
+}
+
+async function handleOpenSignIn() {
+  closeSettingsSheet();
+  localStorage.removeItem('guest_mode');
+  setAuthMode('login');
+  showAuthGate();
 }
 
 async function handleSignOut() {
   Auth.signOut();
+  localStorage.removeItem('guest_mode');
   await clearLocalData();
-  await seedCategoriesIfEmpty();
-  await loadAll();
-  render();
-  renderAccountSection();
-  updateSyncDot('unconfigured');
+  closeSettingsSheet();
+  setAuthMode('login');
+  showAuthGate();
 }
 
 async function handleNewCategory(e) {
@@ -351,10 +403,15 @@ function bindEvents() {
   document.getElementById('settingsBackdrop').addEventListener('click', (e) => {
     if (e.target.id === 'settingsBackdrop') closeSettingsSheet();
   });
-  document.getElementById('authRegisterBtn').addEventListener('click', () => handleAuthSubmit('register'));
-  document.getElementById('authLoginBtn').addEventListener('click', () => handleAuthSubmit('login'));
+  document.getElementById('openSignInBtn').addEventListener('click', handleOpenSignIn);
   document.getElementById('signOutBtn').addEventListener('click', handleSignOut);
   document.getElementById('newCategoryForm').addEventListener('submit', handleNewCategory);
+
+  document.querySelectorAll('.auth-tab').forEach((btn) => {
+    btn.addEventListener('click', () => setAuthMode(btn.dataset.mode));
+  });
+  document.getElementById('authForm').addEventListener('submit', handleAuthSubmit);
+  document.getElementById('continueOfflineBtn').addEventListener('click', handleContinueOffline);
 }
 
 function registerServiceWorker() {

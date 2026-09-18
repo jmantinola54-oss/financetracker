@@ -36,7 +36,7 @@ async function init() {
   registerServiceWorker();
 
   Sync.onStatusChange(updateSyncDot);
-  if (navigator.onLine) Sync.run();
+  if (navigator.onLine && Auth.isSignedIn()) Sync.run();
 }
 
 async function seedCategoriesIfEmpty() {
@@ -229,38 +229,69 @@ async function handleDeleteEntry() {
 
 // ===== Settings sheet =====
 function openSettingsSheet() {
-  document.getElementById('settingApiUrl').value = API.baseUrl || '';
-  document.getElementById('settingApiKey').value = API.apiKey || '';
-  document.getElementById('settingsStatus').textContent = '';
+  document.getElementById('authStatus').textContent = '';
+  renderAccountSection();
   document.getElementById('settingsBackdrop').hidden = false;
 }
 function closeSettingsSheet() {
   document.getElementById('settingsBackdrop').hidden = true;
 }
 
-async function handleSaveSettings() {
-  const url = document.getElementById('settingApiUrl').value.trim();
-  const key = document.getElementById('settingApiKey').value.trim();
-  const status = document.getElementById('settingsStatus');
+function renderAccountSection() {
+  const signedOut = document.getElementById('accountSignedOut');
+  const signedIn = document.getElementById('accountSignedIn');
+  if (Auth.isSignedIn()) {
+    signedOut.hidden = true;
+    signedIn.hidden = false;
+    document.getElementById('accountName').textContent = Auth.userName;
+  } else {
+    signedOut.hidden = false;
+    signedIn.hidden = true;
+  }
+}
 
-  if (!url || !key) {
-    status.textContent = 'Running offline-only on this device.';
-    API.setConfig('', '');
+async function handleAuthSubmit(action) {
+  const name = document.getElementById('authName').value.trim();
+  const pin = document.getElementById('authPin').value.trim();
+  const status = document.getElementById('authStatus');
+
+  if (!name || !pin) {
+    status.textContent = 'Enter a name and PIN.';
     return;
   }
 
-  API.setConfig(url, key);
-  status.textContent = 'Connecting…';
+  status.textContent = action === 'register' ? 'Creating account…' : 'Signing in…';
   try {
-    await API.ping();
-    status.textContent = 'Connected. Syncing…';
+    if (action === 'register') {
+      await Auth.register(name, pin);
+    } else {
+      await Auth.login(name, pin);
+    }
+    // Fresh start locally so we never mix this account's data with
+    // whatever was cached from a previous account on this device.
+    await clearLocalData();
+    await seedCategoriesIfEmpty();
+    status.textContent = 'Signed in. Syncing…';
     await Sync.run();
-    status.textContent = 'Synced successfully.';
     await loadAll();
     render();
+    renderAccountSection();
+    status.textContent = '';
+    document.getElementById('authName').value = '';
+    document.getElementById('authPin').value = '';
   } catch (err) {
-    status.textContent = 'Could not reach the API. Check the URL and key.';
+    status.textContent = err.message || 'Something went wrong.';
   }
+}
+
+async function handleSignOut() {
+  Auth.signOut();
+  await clearLocalData();
+  await seedCategoriesIfEmpty();
+  await loadAll();
+  render();
+  renderAccountSection();
+  updateSyncDot('unconfigured');
 }
 
 async function handleNewCategory(e) {
@@ -320,7 +351,9 @@ function bindEvents() {
   document.getElementById('settingsBackdrop').addEventListener('click', (e) => {
     if (e.target.id === 'settingsBackdrop') closeSettingsSheet();
   });
-  document.getElementById('saveSettingsBtn').addEventListener('click', handleSaveSettings);
+  document.getElementById('authRegisterBtn').addEventListener('click', () => handleAuthSubmit('register'));
+  document.getElementById('authLoginBtn').addEventListener('click', () => handleAuthSubmit('login'));
+  document.getElementById('signOutBtn').addEventListener('click', handleSignOut);
   document.getElementById('newCategoryForm').addEventListener('submit', handleNewCategory);
 }
 

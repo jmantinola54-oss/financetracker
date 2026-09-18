@@ -93,7 +93,21 @@ const Store = {
   async setMeta(key, value) {
     return Store.put('meta', { key, value });
   },
+
+  async clearStore(storeName) {
+    const store = await tx(storeName, 'readwrite');
+    return promisify(store.clear());
+  },
 };
+
+// Wipes locally-cached transactions/categories/sync markers. Used when
+// switching accounts on a shared device so one person never sees another
+// person's data before a fresh sync pulls the right owner's records.
+async function clearLocalData() {
+  await Store.clearStore('transactions');
+  await Store.clearStore('categories');
+  await Store.clearStore('meta');
+}
 
 function uuid() {
   if (crypto.randomUUID) return crypto.randomUUID();

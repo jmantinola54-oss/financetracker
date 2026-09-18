@@ -1,29 +1,55 @@
 <?php
-require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/db.php';
+// bootstrap.php — required by every endpoint that needs a logged-in user
+// (transactions.php, categories.php). Resolves the Authorization: Bearer
+// token to a user, and makes that user's id available as $CURRENT_USER_ID.
 
-header('Access-Control-Allow-Origin: ' . ALLOWED_ORIGIN);
-header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, X-API-Key');
-header('Content-Type: application/json');
+require_once __DIR__ . '/cors.php';
 
-// Preflight
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(204);
-    exit;
+function get_bearer_token(): string {
+    // Some shared-hosting setups (Hostinger's LiteSpeed/PHP-FPM included)
+    // don't reliably surface custom/Authorization headers through
+    // getallheaders(), so we check every place it could show up.
+    $auth = '';
+
+    if (function_exists('getallheaders')) {
+        foreach (getallheaders() as $name => $value) {
+            if (strtolower($name) === 'authorization') { $auth = $value; break; }
+        }
+    }
+    if (!$auth && !empty($_SERVER['HTTP_AUTHORIZATION'])) {
+        $auth = $_SERVER['HTTP_AUTHORIZATION'];
+    }
+    if (!$auth && !empty($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
+        $auth = $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
+    }
+    if (!$auth && function_exists('apache_request_headers')) {
+        foreach (apache_request_headers() as $name => $value) {
+            if (strtolower($name) === 'authorization') { $auth = $value; break; }
+        }
+    }
+
+    if (preg_match('/Bearer\s+(\S+)/i', $auth, $m)) {
+        return $m[1];
+    }
+    return '';
 }
 
-// Simple shared-secret auth
-$headers = getallheaders();
-$providedKey = $headers['X-Api-Key'] ?? $headers['X-API-Key'] ?? '';
-if (!hash_equals(API_KEY, $providedKey)) {
+$token = get_bearer_token();
+if (!$token) {
     http_response_code(401);
-    echo json_encode(['error' => 'Invalid or missing API key']);
+    echo json_encode(['error' => 'Not signed in']);
     exit;
 }
 
-function read_json_body(): array {
-    $raw = file_get_contents('php://input');
-    $data = json_decode($raw, true);
-    return is_array($data) ? $data : [];
+$pdo = get_db();
+$stmt = $pdo->prepare('SELECT user_id FROM device_tokens WHERE token = :token');
+$stmt->execute(['token' => $token]);
+$row = $stmt->fetch();
+
+if (!$row) {
+    http_response_code(401);
+    echo json_encode(['error' => 'Session expired, please sign in again']);
+    exit;
 }
+
+$CURRENT_USER_ID = $row['user_id'];

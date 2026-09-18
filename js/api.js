@@ -1,34 +1,32 @@
 /**
  * api.js — Talks to the PHP API on Hostinger.
- * Nothing in here is called unless the app is online; sync.js decides that.
+ * The base URL is baked in below, so nobody using the app has to know or
+ * type it. Auth is per-user (see auth.js) — nothing here is called unless
+ * someone is signed in and online.
  */
 const API = {
-  // Set this after you deploy the api/ folder to Hostinger, e.g.
-  // 'https://yourdomain.com/finance-api'
-  baseUrl: (localStorage.getItem('api_base_url') || '').replace(/\/$/, ''),
-  apiKey: localStorage.getItem('api_key') || '',
+  // Your Hostinger API address. Everyone who uses this app shares this
+  // same backend; their data stays separated by their account.
+  baseUrl: 'https://evaluation.pwestora.com/finance-api',
 
   isConfigured() {
-    return !!(API.baseUrl && API.apiKey);
-  },
-
-  setConfig(baseUrl, apiKey) {
-    API.baseUrl = baseUrl.replace(/\/$/, '');
-    API.apiKey = apiKey;
-    localStorage.setItem('api_base_url', API.baseUrl);
-    localStorage.setItem('api_key', apiKey);
+    return !!(API.baseUrl && Auth.isSignedIn());
   },
 
   async request(path, options = {}) {
-    if (!API.isConfigured()) throw new Error('API not configured');
+    if (!Auth.isSignedIn()) throw new Error('Not signed in');
     const res = await fetch(`${API.baseUrl}/${path}`, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
-        'X-API-Key': API.apiKey,
+        'Authorization': `Bearer ${Auth.token}`,
         ...(options.headers || {}),
       },
     });
+    if (res.status === 401) {
+      Auth.signOut();
+      throw new Error('Session expired — please sign in again');
+    }
     if (!res.ok) {
       const body = await res.text().catch(() => '');
       throw new Error(`API ${path} failed: ${res.status} ${body}`);
@@ -58,9 +56,5 @@ const API = {
       method: 'POST',
       body: JSON.stringify({ records }),
     });
-  },
-
-  ping() {
-    return API.request('ping.php');
   },
 };

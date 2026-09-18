@@ -3,7 +3,7 @@
  * opens and works with no network at all. API calls are never cached here;
  * sync.js decides when those happen.
  */
-const CACHE_NAME = 'ledger-shell-v1';
+const CACHE_NAME = 'ledger-shell-v2';
 
 const SHELL_FILES = [
   './',
@@ -11,6 +11,7 @@ const SHELL_FILES = [
   './manifest.json',
   './css/style.css',
   './js/db.js',
+  './js/auth.js',
   './js/api.js',
   './js/sync.js',
   './js/app.js',

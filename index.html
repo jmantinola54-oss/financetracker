@@ -113,18 +113,30 @@
       <h2>Settings</h2>
 
       <section class="settings-section">
-        <h3>Sync with Hostinger</h3>
-        <p class="hint">Connect this device to your MySQL database so entries sync across devices. Leave blank to use the app fully offline on this device only.</p>
-        <label class="field">
-          <span>API base URL</span>
-          <input type="url" id="settingApiUrl" placeholder="https://yourdomain.com/finance-api">
-        </label>
-        <label class="field">
-          <span>API key</span>
-          <input type="text" id="settingApiKey" placeholder="the key you set in api/config.php">
-        </label>
-        <button class="btn-primary" id="saveSettingsBtn" type="button">Save & sync now</button>
-        <p class="status-line" id="settingsStatus"></p>
+        <h3>Account</h3>
+
+        <div id="accountSignedOut">
+          <p class="hint">Create an account (just a name and a PIN) to sync your entries across your own devices. Everyone's entries stay private to their own account.</p>
+          <label class="field">
+            <span>Name</span>
+            <input type="text" id="authName" maxlength="60" placeholder="e.g. Juan">
+          </label>
+          <label class="field">
+            <span>PIN</span>
+            <input type="password" id="authPin" inputmode="numeric" maxlength="20" placeholder="at least 4 digits">
+          </label>
+          <div class="sheet-actions">
+            <button class="btn-secondary" id="authLoginBtn" type="button">Log in</button>
+            <button class="btn-primary" id="authRegisterBtn" type="button">Create account</button>
+          </div>
+        </div>
+
+        <div id="accountSignedIn" hidden>
+          <p class="hint">Signed in as <strong id="accountName"></strong>. Log in with the same name and PIN on another device to sync there too.</p>
+          <button class="btn-ghost" id="signOutBtn" type="button">Sign out</button>
+        </div>
+
+        <p class="status-line" id="authStatus"></p>
       </section>
 
       <section class="settings-section">
@@ -147,6 +159,7 @@
 </div>
 
 <script src="js/db.js"></script>
+<script src="js/auth.js"></script>
 <script src="js/api.js"></script>
 <script src="js/sync.js"></script>
 <script src="js/app.js"></script>

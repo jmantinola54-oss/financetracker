@@ -18,7 +18,41 @@
 </head>
 <body>
 
-<div id="app">
+<!-- ===== Auth gate — shown full-screen until signed in or "continue offline" ===== -->
+<div id="authGate">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <span class="auth-mark">₱</span>
+      <h1>Ledger</h1>
+      <p>A quiet place to track what comes in and what goes out.</p>
+    </div>
+
+    <div class="auth-tabs">
+      <button type="button" class="auth-tab active" data-mode="login">Log in</button>
+      <button type="button" class="auth-tab" data-mode="register">Create account</button>
+    </div>
+
+    <form id="authForm">
+      <label class="field">
+        <span>Name</span>
+        <input type="text" id="authName" maxlength="60" placeholder="e.g. Juan" required autocomplete="username">
+      </label>
+      <label class="field">
+        <span>PIN</span>
+        <input type="password" id="authPin" inputmode="numeric" maxlength="20" placeholder="at least 4 digits" required autocomplete="current-password">
+      </label>
+
+      <p class="auth-hint" id="authModeHint">Log in with the name and PIN you used before.</p>
+      <p class="status-line" id="authStatus"></p>
+
+      <button type="submit" class="btn-primary auth-submit" id="authSubmitBtn">Log in</button>
+    </form>
+
+    <button type="button" class="auth-guest-link" id="continueOfflineBtn">Continue without an account</button>
+  </div>
+</div>
+
+<div id="app" hidden>
 
   <!-- ===== Header / balance ===== -->
   <header class="hero">
@@ -116,27 +150,14 @@
         <h3>Account</h3>
 
         <div id="accountSignedOut">
-          <p class="hint">Create an account (just a name and a PIN) to sync your entries across your own devices. Everyone's entries stay private to their own account.</p>
-          <label class="field">
-            <span>Name</span>
-            <input type="text" id="authName" maxlength="60" placeholder="e.g. Juan">
-          </label>
-          <label class="field">
-            <span>PIN</span>
-            <input type="password" id="authPin" inputmode="numeric" maxlength="20" placeholder="at least 4 digits">
-          </label>
-          <div class="sheet-actions">
-            <button class="btn-secondary" id="authLoginBtn" type="button">Log in</button>
-            <button class="btn-primary" id="authRegisterBtn" type="button">Create account</button>
-          </div>
+          <p class="hint">You're using Ledger offline-only on this device. Sign in to sync your entries across your own devices.</p>
+          <button class="btn-primary" id="openSignInBtn" type="button">Sign in</button>
         </div>
 
         <div id="accountSignedIn" hidden>
           <p class="hint">Signed in as <strong id="accountName"></strong>. Log in with the same name and PIN on another device to sync there too.</p>
           <button class="btn-ghost" id="signOutBtn" type="button">Sign out</button>
         </div>
-
-        <p class="status-line" id="authStatus"></p>
       </section>
 
       <section class="settings-section">

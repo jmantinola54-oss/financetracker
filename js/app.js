@@ -80,7 +80,22 @@ async function seedCategoriesIfEmpty() {
 async function loadAll() {
   const [txns, cats] = await Promise.all([Store.getAll('transactions'), Store.getAll('categories')]);
   state.transactions = txns.filter((t) => !t.deleted);
-  state.categories = cats.filter((c) => !c.deleted);
+  state.categories = dedupeCategories(cats.filter((c) => !c.deleted));
+}
+
+// Safety net: if the same category name+type ever ends up duplicated
+// locally (e.g. a stray sync from before this was fixed server-side),
+// only show the earliest one so the list always looks clean.
+function dedupeCategories(cats) {
+  const seen = new Map();
+  for (const c of cats) {
+    const key = `${c.type}:${c.name.trim().toLowerCase()}`;
+    const existing = seen.get(key);
+    if (!existing || c.created_at < existing.created_at) {
+      seen.set(key, c);
+    }
+  }
+  return [...seen.values()];
 }
 
 // ===== Rendering =====

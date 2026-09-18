@@ -1,0 +1,333 @@
+/**
+ * app.js — UI state and rendering. Reads/writes go through Store (db.js).
+ */
+const DEFAULT_CATEGORIES = [
+  { name: 'Salary', type: 'income' },
+  { name: 'Allowance', type: 'income' },
+  { name: 'Freelance', type: 'income' },
+  { name: 'Food', type: 'expense' },
+  { name: 'Transport', type: 'expense' },
+  { name: 'Bills', type: 'expense' },
+  { name: 'Rent', type: 'expense' },
+  { name: 'Shopping', type: 'expense' },
+  { name: 'Other', type: 'expense' },
+];
+
+let state = {
+  cursorMonth: new Date(),
+  transactions: [],
+  categories: [],
+  editingId: null,
+  activeType: 'expense',
+};
+
+const peso = (n) =>
+  '₱' + Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const monthKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+const monthLabel = (d) => d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+async function init() {
+  await openDB();
+  await seedCategoriesIfEmpty();
+  await loadAll();
+  render();
+  bindEvents();
+  registerServiceWorker();
+
+  Sync.onStatusChange(updateSyncDot);
+  if (navigator.onLine) Sync.run();
+}
+
+async function seedCategoriesIfEmpty() {
+  const existing = await Store.getAll('categories');
+  if (existing.length) return;
+  const records = DEFAULT_CATEGORIES.map((c) => ({
+    id: uuid(),
+    name: c.name,
+    type: c.type,
+    created_at: nowISO(),
+    updated_at: nowISO(),
+    synced: 0,
+    deleted: 0,
+  }));
+  await Store.bulkPut('categories', records);
+}
+
+async function loadAll() {
+  const [txns, cats] = await Promise.all([Store.getAll('transactions'), Store.getAll('categories')]);
+  state.transactions = txns.filter((t) => !t.deleted);
+  state.categories = cats.filter((c) => !c.deleted);
+}
+
+// ===== Rendering =====
+function render() {
+  document.getElementById('currentMonth').textContent = monthLabel(state.cursorMonth);
+
+  const key = monthKey(state.cursorMonth);
+  const monthTxns = state.transactions
+    .filter((t) => t.txn_date.startsWith(key))
+    .sort((a, b) => b.txn_date.localeCompare(a.txn_date) || b.created_at.localeCompare(a.created_at));
+
+  const income = monthTxns.filter((t) => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
+  const expense = monthTxns.filter((t) => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
+
+  document.getElementById('balanceFigure').textContent = peso(income - expense);
+  document.getElementById('incomeTotal').textContent = peso(income);
+  document.getElementById('expenseTotal').textContent = peso(expense);
+
+  renderLedger(monthTxns);
+  renderCategorySelect();
+  renderCategoryList();
+}
+
+function renderLedger(monthTxns) {
+  const ledger = document.getElementById('ledger');
+  const empty = document.getElementById('emptyState');
+  ledger.innerHTML = '';
+
+  if (!monthTxns.length) {
+    empty.hidden = false;
+    return;
+  }
+  empty.hidden = true;
+
+  const groups = {};
+  monthTxns.forEach((t) => {
+    (groups[t.txn_date] = groups[t.txn_date] || []).push(t);
+  });
+
+  Object.keys(groups)
+    .sort((a, b) => b.localeCompare(a))
+    .forEach((date) => {
+      const dayTxns = groups[date];
+      const dayTotal = dayTxns.reduce((s, t) => s + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0);
+
+      const group = document.createElement('div');
+      group.className = 'date-group';
+
+      const heading = document.createElement('div');
+      heading.className = 'date-heading';
+      const d = new Date(date + 'T00:00:00');
+      heading.innerHTML = `<span>${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span><span>${peso(dayTotal)}</span>`;
+      group.appendChild(heading);
+
+      dayTxns.forEach((t) => group.appendChild(renderEntryRow(t)));
+      ledger.appendChild(group);
+    });
+}
+
+function renderEntryRow(t) {
+  const cat = state.categories.find((c) => c.id === t.category_id);
+  const row = document.createElement('div');
+  row.className = 'entry-row';
+  row.innerHTML = `
+    <span class="entry-dot ${t.type}"></span>
+    <div class="entry-main">
+      <div class="entry-category">${cat ? cat.name : 'Uncategorized'}</div>
+      ${t.note ? `<div class="entry-note">${escapeHTML(t.note)}</div>` : ''}
+    </div>
+    <span class="entry-amount ${t.type}">${t.type === 'income' ? '+' : '−'}${peso(t.amount)}</span>
+  `;
+  row.addEventListener('click', () => openEntrySheet(t));
+  return row;
+}
+
+function renderCategorySelect() {
+  const select = document.getElementById('fieldCategory');
+  const relevant = state.categories.filter((c) => c.type === state.activeType);
+  select.innerHTML = relevant.map((c) => `<option value="${c.id}">${escapeHTML(c.name)}</option>`).join('');
+}
+
+function renderCategoryList() {
+  const list = document.getElementById('categoryList');
+  list.innerHTML = state.categories
+    .map((c) => `<span class="category-chip ${c.type}">${escapeHTML(c.name)}</span>`)
+    .join('');
+}
+
+function escapeHTML(s) {
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+// ===== Entry sheet =====
+function openEntrySheet(txn) {
+  const backdrop = document.getElementById('entryBackdrop');
+  const title = document.getElementById('entryTitle');
+  const deleteBtn = document.getElementById('deleteEntryBtn');
+
+  state.editingId = txn ? txn.id : null;
+  state.activeType = txn ? txn.type : 'expense';
+
+  setTypeToggle(state.activeType);
+  renderCategorySelect();
+
+  document.getElementById('fieldAmount').value = txn ? txn.amount : '';
+  document.getElementById('fieldCategory').value = txn ? txn.category_id : '';
+  document.getElementById('fieldDate').value = txn ? txn.txn_date : new Date().toISOString().slice(0, 10);
+  document.getElementById('fieldNote').value = txn ? txn.note || '' : '';
+  document.getElementById('fieldId').value = txn ? txn.id : '';
+
+  title.textContent = txn ? 'Edit entry' : 'New entry';
+  deleteBtn.hidden = !txn;
+  backdrop.hidden = false;
+}
+
+function closeEntrySheet() {
+  document.getElementById('entryBackdrop').hidden = true;
+  state.editingId = null;
+}
+
+function setTypeToggle(type) {
+  state.activeType = type;
+  document.querySelectorAll('.type-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.type === type);
+  });
+  renderCategorySelect();
+}
+
+async function handleEntrySubmit(e) {
+  e.preventDefault();
+  const id = document.getElementById('fieldId').value || uuid();
+  const isNew = !document.getElementById('fieldId').value;
+
+  const record = {
+    id,
+    type: state.activeType,
+    amount: parseFloat(document.getElementById('fieldAmount').value),
+    category_id: document.getElementById('fieldCategory').value,
+    txn_date: document.getElementById('fieldDate').value,
+    note: document.getElementById('fieldNote').value.trim(),
+    created_at: isNew ? nowISO() : (await Store.get('transactions', id)).created_at,
+    updated_at: nowISO(),
+    synced: 0,
+    deleted: 0,
+  };
+
+  await Store.put('transactions', record);
+  await loadAll();
+  render();
+  closeEntrySheet();
+  Sync.run();
+}
+
+async function handleDeleteEntry() {
+  const id = document.getElementById('fieldId').value;
+  if (!id) return;
+  const record = await Store.get('transactions', id);
+  record.deleted = 1;
+  record.updated_at = nowISO();
+  record.synced = 0;
+  await Store.put('transactions', record);
+  await loadAll();
+  render();
+  closeEntrySheet();
+  Sync.run();
+}
+
+// ===== Settings sheet =====
+function openSettingsSheet() {
+  document.getElementById('settingApiUrl').value = API.baseUrl || '';
+  document.getElementById('settingApiKey').value = API.apiKey || '';
+  document.getElementById('settingsStatus').textContent = '';
+  document.getElementById('settingsBackdrop').hidden = false;
+}
+function closeSettingsSheet() {
+  document.getElementById('settingsBackdrop').hidden = true;
+}
+
+async function handleSaveSettings() {
+  const url = document.getElementById('settingApiUrl').value.trim();
+  const key = document.getElementById('settingApiKey').value.trim();
+  const status = document.getElementById('settingsStatus');
+
+  if (!url || !key) {
+    status.textContent = 'Running offline-only on this device.';
+    API.setConfig('', '');
+    return;
+  }
+
+  API.setConfig(url, key);
+  status.textContent = 'Connecting…';
+  try {
+    await API.ping();
+    status.textContent = 'Connected. Syncing…';
+    await Sync.run();
+    status.textContent = 'Synced successfully.';
+    await loadAll();
+    render();
+  } catch (err) {
+    status.textContent = 'Could not reach the API. Check the URL and key.';
+  }
+}
+
+async function handleNewCategory(e) {
+  e.preventDefault();
+  const name = document.getElementById('newCategoryName').value.trim();
+  const type = document.getElementById('newCategoryType').value;
+  if (!name) return;
+
+  await Store.put('categories', {
+    id: uuid(),
+    name,
+    type,
+    created_at: nowISO(),
+    updated_at: nowISO(),
+    synced: 0,
+    deleted: 0,
+  });
+  document.getElementById('newCategoryName').value = '';
+  await loadAll();
+  render();
+  Sync.run();
+}
+
+// ===== Sync indicator =====
+function updateSyncDot(status) {
+  const dot = document.getElementById('syncDot');
+  dot.className = 'sync-dot ' + (status === 'synced' ? 'synced' : status === 'syncing' ? 'syncing' : status === 'error' ? 'error' : '');
+  dot.title = 'Sync: ' + status;
+  if (status === 'synced') loadAll().then(render);
+}
+
+// ===== Events =====
+function bindEvents() {
+  document.getElementById('prevMonth').addEventListener('click', () => {
+    state.cursorMonth.setMonth(state.cursorMonth.getMonth() - 1);
+    render();
+  });
+  document.getElementById('nextMonth').addEventListener('click', () => {
+    state.cursorMonth.setMonth(state.cursorMonth.getMonth() + 1);
+    render();
+  });
+
+  document.getElementById('addBtn').addEventListener('click', () => openEntrySheet(null));
+  document.getElementById('cancelEntryBtn').addEventListener('click', closeEntrySheet);
+  document.getElementById('entryBackdrop').addEventListener('click', (e) => {
+    if (e.target.id === 'entryBackdrop') closeEntrySheet();
+  });
+  document.getElementById('entryForm').addEventListener('submit', handleEntrySubmit);
+  document.getElementById('deleteEntryBtn').addEventListener('click', handleDeleteEntry);
+
+  document.querySelectorAll('.type-btn').forEach((btn) => {
+    btn.addEventListener('click', () => setTypeToggle(btn.dataset.type));
+  });
+
+  document.getElementById('menuBtn').addEventListener('click', openSettingsSheet);
+  document.getElementById('closeSettingsBtn').addEventListener('click', closeSettingsSheet);
+  document.getElementById('settingsBackdrop').addEventListener('click', (e) => {
+    if (e.target.id === 'settingsBackdrop') closeSettingsSheet();
+  });
+  document.getElementById('saveSettingsBtn').addEventListener('click', handleSaveSettings);
+  document.getElementById('newCategoryForm').addEventListener('submit', handleNewCategory);
+}
+
+function registerServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('service-worker.js').catch((err) => console.error('SW failed', err));
+  }
+}
+
+document.addEventListener('DOMContentLoaded', init);

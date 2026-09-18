@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ledger — Personal Finance Tracker</title>
+<meta name="theme-color" content="#16241F">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ledger">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ===== Header / balance ===== -->
+  <header class="hero">
+    <div class="hero-top">
+      <button class="icon-btn" id="menuBtn" aria-label="Open settings">⚙</button>
+      <div class="month-nav">
+        <button class="chevron" id="prevMonth" aria-label="Previous month">‹</button>
+        <span id="currentMonth">—</span>
+        <button class="chevron" id="nextMonth" aria-label="Next month">›</button>
+      </div>
+      <span class="sync-dot" id="syncDot" title="Sync status"></span>
+    </div>
+
+    <div class="balance-block">
+      <span class="balance-label">Balance this month</span>
+      <span class="balance-figure" id="balanceFigure">₱0.00</span>
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-item income">
+        <span class="summary-label">Income</span>
+        <span class="summary-value" id="incomeTotal">₱0.00</span>
+      </div>
+      <div class="summary-divider"></div>
+      <div class="summary-item expense">
+        <span class="summary-label">Expenses</span>
+        <span class="summary-value" id="expenseTotal">₱0.00</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===== Ledger ===== -->
+  <main class="ledger" id="ledger">
+    <!-- date groups injected here -->
+  </main>
+
+  <p class="empty-state" id="emptyState" hidden>
+    Nothing recorded for this month yet.<br>Tap + to add your first entry.
+  </p>
+
+  <!-- ===== Add button ===== -->
+  <button class="fab" id="addBtn" aria-label="Add transaction">+</button>
+
+  <!-- ===== Add/Edit entry sheet ===== -->
+  <div class="sheet-backdrop" id="entryBackdrop" hidden>
+    <form class="sheet" id="entryForm">
+      <div class="sheet-handle"></div>
+      <h2 id="entryTitle">New entry</h2>
+
+      <div class="type-toggle">
+        <button type="button" class="type-btn active" data-type="expense">Expense</button>
+        <button type="button" class="type-btn" data-type="income">Income</button>
+      </div>
+
+      <label class="field">
+        <span>Amount</span>
+        <div class="amount-input">
+          <span class="currency-prefix">₱</span>
+          <input type="number" step="0.01" min="0" id="fieldAmount" required inputmode="decimal" placeholder="0.00">
+        </div>
+      </label>
+
+      <label class="field">
+        <span>Category</span>
+        <select id="fieldCategory" required></select>
+      </label>
+
+      <label class="field">
+        <span>Date</span>
+        <input type="date" id="fieldDate" required>
+      </label>
+
+      <label class="field">
+        <span>Note (optional)</span>
+        <input type="text" id="fieldNote" maxlength="120" placeholder="e.g. groceries, jeepney fare">
+      </label>
+
+      <input type="hidden" id="fieldId">
+
+      <div class="sheet-actions">
+        <button type="button" class="btn-ghost" id="deleteEntryBtn" hidden>Delete</button>
+        <button type="button" class="btn-ghost" id="cancelEntryBtn">Cancel</button>
+        <button type="submit" class="btn-primary">Save entry</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ===== Settings sheet ===== -->
+  <div class="sheet-backdrop" id="settingsBackdrop" hidden>
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <h2>Settings</h2>
+
+      <section class="settings-section">
+        <h3>Sync with Hostinger</h3>
+        <p class="hint">Connect this device to your MySQL database so entries sync across devices. Leave blank to use the app fully offline on this device only.</p>
+        <label class="field">
+          <span>API base URL</span>
+          <input type="url" id="settingApiUrl" placeholder="https://yourdomain.com/finance-api">
+        </label>
+        <label class="field">
+          <span>API key</span>
+          <input type="text" id="settingApiKey" placeholder="the key you set in api/config.php">
+        </label>
+        <button class="btn-primary" id="saveSettingsBtn" type="button">Save & sync now</button>
+        <p class="status-line" id="settingsStatus"></p>
+      </section>
+
+      <section class="settings-section">
+        <h3>Categories</h3>
+        <div id="categoryList" class="category-list"></div>
+        <form id="newCategoryForm" class="new-category-form">
+          <input type="text" id="newCategoryName" placeholder="New category name" required maxlength="40">
+          <select id="newCategoryType">
+            <option value="expense">Expense</option>
+            <option value="income">Income</option>
+          </select>
+          <button class="btn-secondary" type="submit">Add</button>
+        </form>
+      </section>
+
+      <button class="btn-ghost" id="closeSettingsBtn" type="button">Close</button>
+    </div>
+  </div>
+
+</div>
+
+<script src="js/db.js"></script>
+<script src="js/api.js"></script>
+<script src="js/sync.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

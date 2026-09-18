@@ -286,3 +286,116 @@ html, body {
 @media (max-width: 380px) {
   .balance-figure { font-size: 36px; }
 }
+
+/* ===== Auth gate ===== */
+#authGate {
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--ink);
+  color: var(--paper);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.auth-card {
+  width: 100%;
+  max-width: 380px;
+}
+.auth-brand {
+  text-align: center;
+  margin-bottom: 32px;
+}
+.auth-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  border: 1.5px solid var(--gold);
+  color: var(--gold);
+  font-family: var(--font-mono);
+  font-size: 24px;
+  margin-bottom: 14px;
+}
+.auth-brand h1 {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  font-size: 28px;
+  margin: 0 0 6px;
+}
+.auth-brand p {
+  font-size: 13px;
+  opacity: 0.65;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.auth-tabs {
+  display: flex;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.06);
+  padding: 4px;
+  margin-bottom: 22px;
+}
+.auth-tab {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  background: none;
+  color: var(--paper);
+  opacity: 0.6;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+}
+.auth-tab.active {
+  background: var(--paper);
+  color: var(--ink);
+  opacity: 1;
+}
+
+#authForm .field span { color: rgba(243,241,231,0.55); }
+#authForm .field input {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.14);
+  color: var(--paper);
+}
+#authForm .field input::placeholder { color: rgba(243,241,231,0.35); }
+#authForm .field input:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.auth-hint {
+  font-size: 12px;
+  opacity: 0.55;
+  margin: -4px 0 4px;
+  line-height: 1.5;
+}
+.auth-submit {
+  width: 100%;
+  background: var(--gold);
+  color: var(--ink);
+  padding: 14px;
+  font-size: 15px;
+  margin-top: 4px;
+}
+.auth-guest-link {
+  display: block;
+  width: 100%;
+  text-align: center;
+  background: none;
+  border: none;
+  color: rgba(243,241,231,0.5);
+  font-size: 13px;
+  margin-top: 22px;
+  padding: 8px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+#authForm .status-line { color: #E8887C; min-height: 16px; }

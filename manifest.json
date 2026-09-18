@@ -1,15 +1,21 @@
 {
-  "name": "Ledger — Personal Finance Tracker",
+  "name": "Ledger — Student Expense Tracker",
   "short_name": "Ledger",
-  "description": "Offline-first personal finance tracker that syncs across devices.",
+  "description": "Offline-first expense tracker for students: log what you spend, watch your monthly budget, and sync across your devices.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#16241F",
   "theme_color": "#16241F",
+  "categories": ["finance", "productivity", "education"],
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "icons/favicon-32.png", "sizes": "32x32", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Add an entry", "short_name": "Add", "url": "./index.html?action=add", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
   ]
 }

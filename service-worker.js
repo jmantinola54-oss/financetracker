@@ -3,7 +3,7 @@
  * opens and works with no network at all. API calls are never cached here;
  * sync.js decides when those happen.
  */
-const CACHE_NAME = 'ledger-shell-v4';
+const CACHE_NAME = 'ledger-shell-v5';
 
 const SHELL_FILES = [
   './',
@@ -17,6 +17,9 @@ const SHELL_FILES = [
   './js/app.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './icons/maskable-512.png',
+  './icons/apple-touch-icon.png',
+  './icons/favicon-32.png',
 ];
 
 self.addEventListener('install', (event) => {

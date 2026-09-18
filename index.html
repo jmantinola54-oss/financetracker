@@ -19,7 +19,7 @@
 </head>
 <body>
 
-<!-- ===== Icon sprite — one stroke set used everywhere ===== -->
+<!-- ===== Icon sprite ===== -->
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
   <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
     <path d="M3.5 10.2 12 3.6l8.5 6.6"/><path d="M5.6 9v10.4h12.8V9"/><path d="M9.8 19.4v-5.6h4.4v5.6"/>
@@ -48,9 +48,15 @@
   <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
     <path d="M12 3.8v11"/><path d="M7.8 10.6 12 14.8l4.2-4.2"/><path d="M4.6 17.4v1.6a1.6 1.6 0 0 0 1.6 1.6h11.6a1.6 1.6 0 0 0 1.6-1.6v-1.6"/>
   </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 12.6 9.8 17.4 19 6.8"/>
+  </symbol>
+  <symbol id="i-sync" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 12a8 8 0 0 1-13.7 5.6L4 15.3"/><path d="M4 12a8 8 0 0 1 13.7-5.6L20 8.7"/><path d="M20 4.4v4.3h-4.3M4 19.6v-4.3h4.3"/>
+  </symbol>
 </svg>
 
-<!-- ===== Auth gate — shown full-screen until signed in or "continue offline" ===== -->
+<!-- ===== Auth gate ===== -->
 <div id="authGate">
   <div class="auth-card">
     <div class="auth-brand">
@@ -84,45 +90,81 @@
   </div>
 </div>
 
-<div id="app" hidden>
+<!-- ===== First-run setup: who's using this, and how money arrives ===== -->
+<div id="setupGate" hidden>
+  <div class="setup-card">
+    <h1>Where does your money come from?</h1>
+    <p class="setup-sub">This sets up your categories and how often your budget resets. You can change it later in Settings.</p>
 
-  <!-- ===== Top bar (persistent) ===== -->
-  <header class="topbar">
-    <span class="topbar-title" id="topbarTitle">Dashboard</span>
-    <span class="sync-dot" id="syncDot" title="Sync status"></span>
-  </header>
+    <div class="profile-list" id="setupProfiles"></div>
+
+    <div class="setup-budget">
+      <label class="field">
+        <span id="setupBudgetLabel">How much do you want to spend per week?</span>
+        <div class="amount-input">
+          <span class="currency-prefix">₱</span>
+          <input type="number" step="1" min="0" id="setupBudget" inputmode="decimal" placeholder="e.g. 1000">
+        </div>
+      </label>
+      <p class="hint">Not sure yet? Leave it blank — you can set it anytime.</p>
+    </div>
+
+    <button type="button" class="btn-primary btn-block" id="setupDoneBtn">Start tracking</button>
+  </div>
+</div>
+
+<div id="app" hidden>
 
   <div class="swipe-area" id="swipeArea">
 
-  <!-- ===== Dashboard view ===== -->
+  <!-- ===== Dashboard ===== -->
   <main class="view" id="view-dashboard">
 
     <section class="hero">
-      <span class="hero-greeting" id="heroGreeting">Hi there</span>
-      <div class="balance-block">
-        <span class="balance-label" id="dashMonthLabel">This month's balance</span>
-        <span class="balance-figure" id="balanceFigure">₱0.00</span>
+      <div class="hero-top">
+        <span class="hero-greeting" id="heroGreeting">Hi there</span>
+        <button type="button" class="sync-chip" id="syncChip" title="Sync status">
+          <span class="sync-dot" id="syncDot"></span><span id="syncLabel">Offline</span>
+        </button>
       </div>
+
+      <div class="balance-block">
+        <span class="balance-label" id="heroLabel">Safe to spend today</span>
+        <span class="balance-figure" id="heroFigure">₱0.00</span>
+        <span class="balance-sub" id="heroSub"></span>
+      </div>
+
       <div class="summary-row">
         <div class="summary-item income">
-          <span class="summary-label">Income</span>
+          <span class="summary-label" id="inLabel">Money in</span>
           <span class="summary-value" id="incomeTotal">₱0.00</span>
         </div>
         <div class="summary-divider"></div>
         <div class="summary-item expense">
-          <span class="summary-label">Expenses</span>
+          <span class="summary-label">Spent</span>
           <span class="summary-value" id="expenseTotal">₱0.00</span>
+        </div>
+        <div class="summary-divider"></div>
+        <div class="summary-item">
+          <span class="summary-label">Left</span>
+          <span class="summary-value" id="leftTotal">₱0.00</span>
         </div>
       </div>
     </section>
 
+    <!-- Quick add: the two-tap path for the things logged every day -->
+    <section class="quick-add" id="quickAdd" hidden>
+      <div class="quick-row" id="quickRow"></div>
+    </section>
+
     <section class="card" id="budgetCard">
       <div class="card-heading">
-        <h3>Monthly budget</h3>
+        <h3 id="budgetTitle">Budget</h3>
         <button type="button" class="link-btn" id="editBudgetBtn">Edit</button>
       </div>
-      <div id="budgetSetPrompt" class="hint" hidden>
-        Set a monthly budget and Ledger will track how much you have left to spend.
+      <div id="budgetSetPrompt" class="budget-empty" hidden>
+        <p class="hint">No budget yet. Set one and Ledger works out what's safe to spend each day.</p>
+        <button type="button" class="btn-secondary btn-block" id="setBudgetBtn">Set a budget</button>
       </div>
       <div id="budgetProgressWrap" hidden>
         <div class="progress-track">
@@ -135,10 +177,19 @@
 
     <section class="card">
       <div class="card-heading">
+        <h3>Last 7 days</h3>
+        <span class="card-note" id="weekTotal"></span>
+      </div>
+      <div class="spark" id="spark"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-heading">
         <h3>Where it's going</h3>
+        <span class="card-note" id="breakdownPeriod"></span>
       </div>
       <div id="categoryBreakdown" class="category-breakdown"></div>
-      <p class="hint" id="breakdownEmpty" hidden>No expenses logged this month yet.</p>
+      <p class="hint" id="breakdownEmpty" hidden>No spending recorded yet.</p>
     </section>
 
     <section class="card">
@@ -152,7 +203,7 @@
 
   </main>
 
-  <!-- ===== Calendar view ===== -->
+  <!-- ===== Calendar ===== -->
   <main class="view" id="view-calendar" hidden>
     <div class="month-bar">
       <button class="chevron" id="calPrev" aria-label="Previous month">
@@ -185,7 +236,7 @@
     </section>
   </main>
 
-  <!-- ===== History view ===== -->
+  <!-- ===== History ===== -->
   <main class="view" id="view-history" hidden>
     <div class="month-bar">
       <button class="chevron" id="prevMonth" aria-label="Previous month">
@@ -199,60 +250,106 @@
 
     <div class="month-totals" id="monthTotals"></div>
 
-    <div class="ledger" id="ledger">
-      <!-- date groups injected here -->
-    </div>
+    <div class="ledger" id="ledger"></div>
 
     <p class="empty-state" id="emptyState" hidden>
       Nothing recorded for this month yet.<br>Tap + to add your first entry.
     </p>
   </main>
 
-  <!-- ===== Settings view ===== -->
+  <!-- ===== Settings ===== -->
   <main class="view" id="view-settings" hidden>
 
+    <h2 class="view-title">Settings</h2>
+
+    <!-- 1. How you earn -->
     <section class="card">
-      <h3>Account</h3>
-      <div id="accountSignedOut">
-        <p class="hint">You're using Ledger offline-only on this device. Sign in to sync your entries across your own devices.</p>
-        <button class="btn-primary" id="openSignInBtn" type="button">Sign in</button>
-      </div>
-      <div id="accountSignedIn" hidden>
-        <p class="hint">Signed in as <strong id="accountName"></strong>. Log in with the same name and PIN on another device to sync there too.</p>
-        <button class="btn-ghost btn-block" id="signOutBtn" type="button">Sign out</button>
-      </div>
+      <div class="card-heading"><h3>Your setup</h3></div>
+      <p class="hint">Changing this offers the matching categories. Nothing you've already logged is touched.</p>
+      <div class="profile-list" id="settingsProfiles"></div>
     </section>
 
+    <!-- 2. Budget -->
     <section class="card">
-      <h3>Monthly budget</h3>
-      <p class="hint">Set what you expect to spend each month. Ledger warns you as you get close.</p>
+      <div class="card-heading"><h3>Budget</h3></div>
+      <p class="hint">How much you plan to spend, and how often it resets.</p>
+
+      <div class="seg" id="periodSeg" role="group" aria-label="Budget resets">
+        <button type="button" class="seg-btn" data-period="week">Weekly</button>
+        <button type="button" class="seg-btn" data-period="semi">Twice a month</button>
+        <button type="button" class="seg-btn" data-period="month">Monthly</button>
+      </div>
+
       <form id="budgetForm" class="inline-form">
         <div class="amount-input">
           <span class="currency-prefix">₱</span>
-          <input type="number" step="0.01" min="0" id="budgetInput" inputmode="decimal" placeholder="3000">
+          <input type="number" step="1" min="0" id="budgetInput" inputmode="decimal" placeholder="0">
         </div>
         <button class="btn-secondary" type="submit">Save</button>
       </form>
       <p class="status-line ok" id="budgetSaved"></p>
     </section>
 
+    <!-- 3. Categories -->
     <section class="card">
-      <h3>Categories</h3>
-      <p class="hint">Tap the × on a category to remove it. Entries already filed under it keep their history.</p>
-      <div id="categoryList" class="category-list"></div>
-      <form id="newCategoryForm" class="inline-form">
-        <input type="text" id="newCategoryName" placeholder="New category" required maxlength="40">
-        <select id="newCategoryType">
-          <option value="expense">Expense</option>
-          <option value="income">Income</option>
-        </select>
-        <button class="btn-secondary" type="submit">Add</button>
+      <div class="card-heading"><h3>Categories</h3></div>
+
+      <div class="cat-group">
+        <div class="cat-group-head">
+          <span class="cat-group-title">Money out</span>
+          <span class="cat-count" id="expenseCount"></span>
+        </div>
+        <div id="expenseCats" class="category-list"></div>
+      </div>
+
+      <div class="cat-group">
+        <div class="cat-group-head">
+          <span class="cat-group-title">Money in</span>
+          <span class="cat-count" id="incomeCount"></span>
+        </div>
+        <div id="incomeCats" class="category-list"></div>
+      </div>
+
+      <form id="newCategoryForm" class="cat-add">
+        <div class="seg small" id="newCatTypeSeg" role="group" aria-label="Category type">
+          <button type="button" class="seg-btn active" data-cattype="expense">Money out</button>
+          <button type="button" class="seg-btn" data-cattype="income">Money in</button>
+        </div>
+        <div class="cat-add-row">
+          <input type="text" id="newCategoryName" placeholder="Name it — e.g. Baon, Printing" required maxlength="40">
+          <button class="btn-secondary" type="submit">Add</button>
+        </div>
       </form>
+      <p class="hint hint-tight">Removing a category keeps it on entries you already saved.</p>
     </section>
 
+    <!-- 4. Account & sync -->
     <section class="card">
-      <h3>Your data</h3>
-      <p class="hint">Download every entry as a spreadsheet file you can open in Excel or Google Sheets.</p>
+      <div class="card-heading"><h3>Account &amp; sync</h3></div>
+
+      <div id="accountSignedOut">
+        <p class="hint">You're using Ledger offline-only on this device. Sign in to sync your entries across your own devices.</p>
+        <button class="btn-primary btn-block" id="openSignInBtn" type="button">Sign in</button>
+      </div>
+
+      <div id="accountSignedIn" hidden>
+        <div class="row-line">
+          <span>Signed in as <strong id="accountName"></strong></span>
+        </div>
+        <div class="row-line">
+          <span class="muted" id="syncStatusText">Not synced yet</span>
+          <button class="link-btn btn-icon" id="syncNowBtn" type="button">
+            <svg class="ico small" aria-hidden="true"><use href="#i-sync"/></svg>Sync now
+          </button>
+        </div>
+        <button class="btn-ghost btn-block" id="signOutBtn" type="button">Sign out</button>
+      </div>
+    </section>
+
+    <!-- 5. Data -->
+    <section class="card">
+      <div class="card-heading"><h3>Your data</h3></div>
+      <p class="hint">Download every entry as a spreadsheet you can open in Excel or Google Sheets.</p>
       <button class="btn-secondary btn-block btn-icon" id="exportCsvBtn" type="button">
         <svg class="ico" aria-hidden="true"><use href="#i-download"/></svg>Export as CSV
       </button>
@@ -263,20 +360,19 @@
 
   </div><!-- /swipe-area -->
 
-  <!-- ===== Add button ===== -->
   <button class="fab" id="addBtn" aria-label="Add entry">
     <svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg>
   </button>
 
-  <!-- ===== Add/Edit entry sheet ===== -->
+  <!-- ===== Entry sheet ===== -->
   <div class="sheet-backdrop" id="entryBackdrop" hidden>
     <form class="sheet" id="entryForm">
       <div class="sheet-grab" id="entryGrab"><div class="sheet-handle"></div></div>
       <h2 id="entryTitle">New entry</h2>
 
       <div class="type-toggle">
-        <button type="button" class="type-btn active" data-type="expense">Expense</button>
-        <button type="button" class="type-btn" data-type="income">Income</button>
+        <button type="button" class="type-btn active" data-type="expense">Money out</button>
+        <button type="button" class="type-btn" data-type="income">Money in</button>
       </div>
 
       <label class="field">
@@ -312,7 +408,6 @@
     </form>
   </div>
 
-  <!-- ===== Bottom navigation ===== -->
   <nav class="bottom-nav">
     <button type="button" class="nav-btn active" data-view="dashboard">
       <svg class="nav-ico" aria-hidden="true"><use href="#i-home"/></svg><span>Dashboard</span>

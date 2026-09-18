@@ -2,23 +2,28 @@
  * app.js — UI state and rendering. Reads/writes go through Store (db.js).
  */
 const DEFAULT_CATEGORIES = [
-  { name: 'Salary', type: 'income' },
   { name: 'Allowance', type: 'income' },
+  { name: 'Salary', type: 'income' },
   { name: 'Freelance', type: 'income' },
   { name: 'Food', type: 'expense' },
   { name: 'Transport', type: 'expense' },
   { name: 'Bills', type: 'expense' },
   { name: 'Rent', type: 'expense' },
+  { name: 'School supplies', type: 'expense' },
   { name: 'Shopping', type: 'expense' },
   { name: 'Other', type: 'expense' },
 ];
 
+const BREAKDOWN_LIMIT = 5; // top N categories shown before folding the rest into "Other"
+
 let state = {
-  cursorMonth: new Date(),
+  view: 'dashboard', // 'dashboard' | 'history' | 'settings'
+  cursorMonth: new Date(), // month currently browsed in History
   transactions: [],
   categories: [],
   editingId: null,
   activeType: 'expense',
+  budget: 0,
 };
 
 const peso = (n) =>
@@ -48,8 +53,10 @@ async function enterApp() {
 
   await seedCategoriesIfEmpty();
   await loadAll();
-  render();
-  renderAccountSection();
+  state.budget = Number((await Store.getMeta('monthly_budget')) || 0);
+
+  // Always land on the Dashboard right after signing in.
+  switchView('dashboard');
 
   if (navigator.onLine && Auth.isSignedIn()) Sync.run();
 }
@@ -98,25 +105,147 @@ function dedupeCategories(cats) {
   return [...seen.values()];
 }
 
-// ===== Rendering =====
-function render() {
-  document.getElementById('currentMonth').textContent = monthLabel(state.cursorMonth);
+// ===== View routing =====
+const VIEW_TITLES = { dashboard: 'Dashboard', history: 'History', settings: 'Settings' };
 
-  const key = monthKey(state.cursorMonth);
-  const monthTxns = state.transactions
+function switchView(view) {
+  state.view = view;
+  ['dashboard', 'history', 'settings'].forEach((v) => {
+    document.getElementById(`view-${v}`).hidden = v !== view;
+  });
+  document.querySelectorAll('.nav-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.view === view);
+  });
+  document.getElementById('topbarTitle').textContent = VIEW_TITLES[view];
+  document.getElementById('addBtn').hidden = view === 'settings';
+
+  if (view === 'dashboard') renderDashboard();
+  else if (view === 'history') renderHistory();
+  else if (view === 'settings') renderSettingsView();
+}
+
+// ===== Dashboard =====
+function monthTxnsFor(date) {
+  const key = monthKey(date);
+  return state.transactions
     .filter((t) => t.txn_date.startsWith(key))
     .sort((a, b) => b.txn_date.localeCompare(a.txn_date) || b.created_at.localeCompare(a.created_at));
+}
 
+function renderDashboard() {
+  const now = new Date();
+  const monthTxns = monthTxnsFor(now);
   const income = monthTxns.filter((t) => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
   const expense = monthTxns.filter((t) => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
 
+  document.getElementById('heroGreeting').textContent = Auth.isSignedIn()
+    ? `Hi, ${Auth.userName}`
+    : 'Hi there';
+  document.getElementById('dashMonthLabel').textContent = `${monthLabel(now)} balance`;
   document.getElementById('balanceFigure').textContent = peso(income - expense);
   document.getElementById('incomeTotal').textContent = peso(income);
   document.getElementById('expenseTotal').textContent = peso(expense);
 
-  renderLedger(monthTxns);
+  renderBudgetCard(expense);
+  renderCategoryBreakdown(monthTxns);
+  renderRecentActivity();
+
+  // Keep the entry sheet's category dropdown fresh too.
   renderCategorySelect();
-  renderCategoryList();
+}
+
+function renderBudgetCard(expense) {
+  const prompt = document.getElementById('budgetSetPrompt');
+  const wrap = document.getElementById('budgetProgressWrap');
+  const fill = document.getElementById('budgetProgressFill');
+  const caption = document.getElementById('budgetCaption');
+
+  if (!state.budget || state.budget <= 0) {
+    prompt.hidden = false;
+    wrap.hidden = true;
+    return;
+  }
+
+  prompt.hidden = true;
+  wrap.hidden = false;
+
+  const ratio = expense / state.budget;
+  const pct = Math.min(ratio, 1) * 100;
+  fill.style.width = `${pct}%`;
+  fill.classList.toggle('warn', ratio >= 0.75 && ratio < 1);
+  fill.classList.toggle('over', ratio >= 1);
+
+  if (ratio >= 1) {
+    caption.textContent = `${peso(expense - state.budget)} over your ${peso(state.budget)} budget`;
+  } else {
+    caption.textContent = `${peso(state.budget - expense)} left of ${peso(state.budget)}`;
+  }
+}
+
+function renderCategoryBreakdown(monthTxns) {
+  const container = document.getElementById('categoryBreakdown');
+  const empty = document.getElementById('breakdownEmpty');
+  const expenseTxns = monthTxns.filter((t) => t.type === 'expense');
+
+  if (!expenseTxns.length) {
+    container.innerHTML = '';
+    empty.hidden = false;
+    return;
+  }
+  empty.hidden = true;
+
+  const sums = new Map();
+  expenseTxns.forEach((t) => {
+    const cat = state.categories.find((c) => c.id === t.category_id);
+    const name = cat ? cat.name : 'Uncategorized';
+    sums.set(name, (sums.get(name) || 0) + Number(t.amount));
+  });
+
+  let rows = [...sums.entries()].sort((a, b) => b[1] - a[1]);
+  if (rows.length > BREAKDOWN_LIMIT) {
+    const kept = rows.slice(0, BREAKDOWN_LIMIT);
+    const rest = rows.slice(BREAKDOWN_LIMIT).reduce((s, [, amt]) => s + amt, 0);
+    rows = [...kept, ['Other', rest]];
+  }
+
+  const total = expenseTxns.reduce((s, t) => s + Number(t.amount), 0);
+  container.innerHTML = rows
+    .map(([name, amt]) => {
+      const pct = total ? (amt / total) * 100 : 0;
+      return `
+        <div class="breakdown-row">
+          <div class="breakdown-labels">
+            <span class="breakdown-name">${escapeHTML(name)}</span>
+            <span class="breakdown-amount">${peso(amt)}</span>
+          </div>
+          <div class="breakdown-track"><div class="breakdown-fill" style="width:${pct}%"></div></div>
+        </div>`;
+    })
+    .join('');
+}
+
+function renderRecentActivity() {
+  const list = document.getElementById('recentList');
+  const empty = document.getElementById('recentEmpty');
+  const recent = [...state.transactions]
+    .sort((a, b) => b.txn_date.localeCompare(a.txn_date) || b.created_at.localeCompare(a.created_at))
+    .slice(0, 5);
+
+  if (!recent.length) {
+    list.innerHTML = '';
+    empty.hidden = false;
+    return;
+  }
+  empty.hidden = true;
+  list.innerHTML = '';
+  recent.forEach((t) => list.appendChild(renderEntryRow(t)));
+}
+
+// ===== History =====
+function renderHistory() {
+  document.getElementById('currentMonth').textContent = monthLabel(state.cursorMonth);
+  const monthTxns = monthTxnsFor(state.cursorMonth);
+  renderLedger(monthTxns);
 }
 
 function renderLedger(monthTxns) {
@@ -190,6 +319,12 @@ function escapeHTML(s) {
   return div.innerHTML;
 }
 
+// Re-render whichever view is currently on screen (after a data change).
+function refreshCurrentView() {
+  if (state.view === 'dashboard') renderDashboard();
+  else if (state.view === 'history') renderHistory();
+}
+
 // ===== Entry sheet =====
 function openEntrySheet(txn) {
   const backdrop = document.getElementById('entryBackdrop');
@@ -246,7 +381,7 @@ async function handleEntrySubmit(e) {
 
   await Store.put('transactions', record);
   await loadAll();
-  render();
+  refreshCurrentView();
   closeEntrySheet();
   Sync.run();
 }
@@ -260,18 +395,16 @@ async function handleDeleteEntry() {
   record.synced = 0;
   await Store.put('transactions', record);
   await loadAll();
-  render();
+  refreshCurrentView();
   closeEntrySheet();
   Sync.run();
 }
 
-// ===== Settings sheet =====
-function openSettingsSheet() {
+// ===== Settings view =====
+function renderSettingsView() {
   renderAccountSection();
-  document.getElementById('settingsBackdrop').hidden = false;
-}
-function closeSettingsSheet() {
-  document.getElementById('settingsBackdrop').hidden = true;
+  renderCategoryList();
+  document.getElementById('budgetInput').value = state.budget || '';
 }
 
 function renderAccountSection() {
@@ -285,6 +418,19 @@ function renderAccountSection() {
     signedOut.hidden = false;
     signedIn.hidden = true;
   }
+}
+
+async function handleBudgetSubmit(e) {
+  e.preventDefault();
+  const val = parseFloat(document.getElementById('budgetInput').value) || 0;
+  state.budget = val;
+  await Store.setMeta('monthly_budget', String(val));
+  if (state.view === 'dashboard') renderDashboard();
+}
+
+function handleEditBudgetClick() {
+  switchView('settings');
+  document.getElementById('budgetInput').focus();
 }
 
 // ===== Auth gate (login / create account) =====
@@ -346,7 +492,6 @@ function handleContinueOffline() {
 }
 
 async function handleOpenSignIn() {
-  closeSettingsSheet();
   localStorage.removeItem('guest_mode');
   setAuthMode('login');
   showAuthGate();
@@ -356,7 +501,6 @@ async function handleSignOut() {
   Auth.signOut();
   localStorage.removeItem('guest_mode');
   await clearLocalData();
-  closeSettingsSheet();
   setAuthMode('login');
   showAuthGate();
 }
@@ -378,7 +522,7 @@ async function handleNewCategory(e) {
   });
   document.getElementById('newCategoryName').value = '';
   await loadAll();
-  render();
+  renderCategoryList();
   Sync.run();
 }
 
@@ -387,18 +531,18 @@ function updateSyncDot(status) {
   const dot = document.getElementById('syncDot');
   dot.className = 'sync-dot ' + (status === 'synced' ? 'synced' : status === 'syncing' ? 'syncing' : status === 'error' ? 'error' : '');
   dot.title = 'Sync: ' + status;
-  if (status === 'synced') loadAll().then(render);
+  if (status === 'synced') loadAll().then(refreshCurrentView);
 }
 
 // ===== Events =====
 function bindEvents() {
   document.getElementById('prevMonth').addEventListener('click', () => {
     state.cursorMonth.setMonth(state.cursorMonth.getMonth() - 1);
-    render();
+    renderHistory();
   });
   document.getElementById('nextMonth').addEventListener('click', () => {
     state.cursorMonth.setMonth(state.cursorMonth.getMonth() + 1);
-    render();
+    renderHistory();
   });
 
   document.getElementById('addBtn').addEventListener('click', () => openEntrySheet(null));
@@ -413,14 +557,16 @@ function bindEvents() {
     btn.addEventListener('click', () => setTypeToggle(btn.dataset.type));
   });
 
-  document.getElementById('menuBtn').addEventListener('click', openSettingsSheet);
-  document.getElementById('closeSettingsBtn').addEventListener('click', closeSettingsSheet);
-  document.getElementById('settingsBackdrop').addEventListener('click', (e) => {
-    if (e.target.id === 'settingsBackdrop') closeSettingsSheet();
+  document.querySelectorAll('.nav-btn').forEach((btn) => {
+    btn.addEventListener('click', () => switchView(btn.dataset.view));
   });
+  document.getElementById('viewAllBtn').addEventListener('click', () => switchView('history'));
+  document.getElementById('editBudgetBtn').addEventListener('click', handleEditBudgetClick);
+
   document.getElementById('openSignInBtn').addEventListener('click', handleOpenSignIn);
   document.getElementById('signOutBtn').addEventListener('click', handleSignOut);
   document.getElementById('newCategoryForm').addEventListener('submit', handleNewCategory);
+  document.getElementById('budgetForm').addEventListener('submit', handleBudgetSubmit);
 
   document.querySelectorAll('.auth-tab').forEach((btn) => {
     btn.addEventListener('click', () => setAuthMode(btn.dataset.mode));
